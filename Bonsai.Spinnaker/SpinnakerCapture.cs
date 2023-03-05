@@ -5,6 +5,7 @@ using System;
 using System.ComponentModel;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Runtime.Remoting.Channels;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 
@@ -27,11 +28,11 @@ namespace Bonsai.Spinnaker
         public string SerialNumber { get; set; }
 
         [Description("The method used to process bayer color images.")]
-        public ColorProcessingAlgorithm ColorProcessing { get; set; }
-        public SpinnakerNET.ColorProcessingAlgorithm ColorProcessing2 { get; set; } = SpinnakerNET.ColorProcessingAlgorithm.HQ_LINEAR;
+        //public ColorProcessingAlgorithm ColorProcessing { get; set; }
+        public SpinnakerNET.ColorProcessingAlgorithm ColorProcessing { get; set; } = SpinnakerNET.ColorProcessingAlgorithm.HQ_LINEAR;
 
         [Description("Camera's pixel format.")]
-        public CameraPixelFormat PixFormat { get; set; }
+        public PixelFormatEnums PixFormat { get; set; } = PixelFormatEnums.BayerRG12p;
 
         protected virtual void Configure(IManagedCamera camera)
         {
@@ -69,7 +70,7 @@ namespace Bonsai.Spinnaker
                 throw new InvalidOperationException("Unable to set acquisition mode to continuous.");
             }
 
-            /*acquisitionMode.Value = continuousAcquisitionMode.Symbolic;
+            acquisitionMode.Value = continuousAcquisitionMode.Symbolic;
 
             var pixelFormat = nodeMap.GetNode<IEnum>("PixelFormat");
             if (pixelFormat == null || !pixelFormat.IsWritable)
@@ -80,10 +81,10 @@ namespace Bonsai.Spinnaker
             var selectedPixelFormat = pixelFormat.GetEntryByName(PixFormat.ToString());
             if (selectedPixelFormat == null || !selectedPixelFormat.IsReadable)
             {
-                throw new InvalidOperationException("Unable to get selected pixel formt value");
+                throw new InvalidOperationException("Pixel format not supported by camera.");
             }
 
-            pixelFormat.Value = selectedPixelFormat.Symbolic;*/
+            pixelFormat.Value = selectedPixelFormat.Symbolic;
 
 
             var exposureMode = nodeMap.GetNode<IEnum>("ExposureMode");
@@ -150,7 +151,7 @@ namespace Bonsai.Spinnaker
             exposureTime.Value = exposureTime.Max;
         }
 
-        static Func<IManagedImage, IplImage> GetConverter(PixelFormatEnums pixelFormat, ColorProcessingAlgorithm colorProcessing)
+        /*static Func<IManagedImage, IplImage> GetConverter(PixelFormatEnums pixelFormat, ColorProcessingAlgorithm colorProcessing)
         {
             int outputChannels;
             IplDepth outputDepth;
@@ -213,7 +214,7 @@ namespace Bonsai.Spinnaker
                     }
                 }
             };
-        }
+        }*/
 
         public override IObservable<SpinnakerDataFrame> Generate()
         {
@@ -355,8 +356,12 @@ namespace Bonsai.Spinnaker
                         EnableSync(camera);
                         await start;
 
-                        var imageFormat = default(PixelFormatEnums);
-                        var converter = default(Func<IManagedImage, IplImage>);
+                        var imageFormat = PixelFormatEnums.UNKNOWN_PIXELFORMAT;
+                        var depth = IplDepth.U8;
+                        int channels = 1;
+                        //var converter = default(Func<IManagedImage, IplImage>);
+                        IManagedImageProcessor converter = new ManagedImageProcessor();
+                        converter.SetColorProcessing(ColorProcessing);
                         using (var cancellation = cancellationToken.Register(camera.EndAcquisition))
                         {
                             while (!cancellationToken.IsCancellationRequested)
@@ -369,14 +374,34 @@ namespace Bonsai.Spinnaker
                                         continue;
                                     }
 
-                                    if (converter == null || image.PixelFormat != imageFormat)
+                                    if (imageFormat == PixelFormatEnums.UNKNOWN_PIXELFORMAT)
                                     {
-                                        converter = GetConverter(image.PixelFormat, ColorProcessing);
-                                        imageFormat = image.PixelFormat;
+                                        //converter = GetConverter(image.PixelFormat, ColorProcessing);
+                                        if (image.PixelFormat.ToString().Contains("Mono"))
+                                        {
+                                            imageFormat = PixelFormatEnums.Mono16;
+                                            depth = IplDepth.U16;
+                                            channels = 1;
+                                        }
+                                        else
+                                        {
+                                            imageFormat = PixelFormatEnums.BGR8;
+                                            depth = IplDepth.U8;
+                                            channels = 3;
+                                        }
+                                        //imageFormat = image.PixelFormat;
                                     }
 
-                                    var output = converter(image);
-                                    observer.OnNext(new SpinnakerDataFrame(output, image.ChunkData));
+                                    //var output = converter(image);
+                                    using (IManagedImage convertedImage = converter.Convert(image, imageFormat))
+                                    {
+                                        var width = (int)image.Width;
+                                        var height = (int)image.Height;
+                                        var output = new IplImage(new Size(width, height), depth, channels);
+                                        var tmp = new IplImage(new Size(width, height), depth, channels, convertedImage.DataPtr);
+                                        CV.Copy(tmp, output);
+                                        observer.OnNext(new SpinnakerDataFrame(output, image.ChunkData));
+                                    }
                                 }
                             }
                         }
