@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Authors>Gonçalo Lopes</Authors>
+    <Authors>Gonçalo Lopes, Eis Annavini</Authors>
     <Title>Bonsai - Spinnaker Library</Title>
-    <Description>Bonsai Library containing modules for acquiring images from FLIR Spinnaker cameras. Spinnaker SDK version 1.29.0.5 is required.</Description>
+    <Description>Bonsai Library containing modules for acquiring images from FLIR Spinnaker cameras. Spinnaker SDK version 3.0.0.110 is required.</Description>
     <Copyright>Copyright © Gonçalo Lopes 2022</Copyright>
     <ProjectUrl>https://github.com/bonsai-rx/spinnaker</ProjectUrl>
     <PackageLicenseUrl>https://github.com/bonsai-rx/spinnaker/blob/master/LICENSE</PackageLicenseUrl>
@@ -15,9 +15,10 @@
     <PackageOutputPath>..\bin\$(Configuration)</PackageOutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <TargetFramework>net462</TargetFramework>
-    <VersionPrefix>0.7.1</VersionPrefix>
+    <VersionPrefix>0.8.0</VersionPrefix>
     <VersionSuffix></VersionSuffix>
     <Features>strict</Features>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,8 +31,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Bonsai.Core" Version="2.5.0" />
-    <PackageReference Include="OpenCV.Net" Version="3.3.1" />
+    <PackageReference Include="Bonsai.Core" Version="2.7.1" />
+    <PackageReference Include="OpenCV.Net" Version="3.4.1" />
   </ItemGroup>
 
 </Project>

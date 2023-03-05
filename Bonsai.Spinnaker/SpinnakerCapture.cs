@@ -19,12 +19,19 @@ namespace Bonsai.Spinnaker
         [Description("The optional index of the camera from which to acquire images.")]
         public int? Index { get; set; }
 
+        [Description("The frame rate at which to acquire images.")]
+        public double FrameRate { get; set; } = 50.0;
+
         [TypeConverter(typeof(SerialNumberConverter))]
         [Description("The optional serial number of the camera from which to acquire images.")]
         public string SerialNumber { get; set; }
 
         [Description("The method used to process bayer color images.")]
         public ColorProcessingAlgorithm ColorProcessing { get; set; }
+        public SpinnakerNET.ColorProcessingAlgorithm ColorProcessing2 { get; set; } = SpinnakerNET.ColorProcessingAlgorithm.HQ_LINEAR;
+
+        [Description("Camera's pixel format.")]
+        public CameraPixelFormat PixFormat { get; set; }
 
         protected virtual void Configure(IManagedCamera camera)
         {
@@ -62,7 +69,85 @@ namespace Bonsai.Spinnaker
                 throw new InvalidOperationException("Unable to set acquisition mode to continuous.");
             }
 
-            acquisitionMode.Value = continuousAcquisitionMode.Symbolic;
+            /*acquisitionMode.Value = continuousAcquisitionMode.Symbolic;
+
+            var pixelFormat = nodeMap.GetNode<IEnum>("PixelFormat");
+            if (pixelFormat == null || !pixelFormat.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to set pixel format");
+            }
+
+            var selectedPixelFormat = pixelFormat.GetEntryByName(PixFormat.ToString());
+            if (selectedPixelFormat == null || !selectedPixelFormat.IsReadable)
+            {
+                throw new InvalidOperationException("Unable to get selected pixel formt value");
+            }
+
+            pixelFormat.Value = selectedPixelFormat.Symbolic;*/
+
+
+            var exposureMode = nodeMap.GetNode<IEnum>("ExposureMode");
+            if (exposureMode == null || !exposureMode.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to set camera exposure mode.");
+            }
+
+            var timedExposureMode = exposureMode.GetEntryByName("Timed");
+            if (timedExposureMode == null || !timedExposureMode.IsReadable)
+            {
+                throw new InvalidOperationException("Unable to set camera exposure mode.");
+            }
+
+            exposureMode.Value = timedExposureMode.Symbolic;
+
+            var autoExposure = nodeMap.GetNode<IEnum>("ExposureAuto");
+            if (autoExposure == null || !autoExposure.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to set camera auto exposure.");
+            }
+
+            var autoExposureMode = autoExposure.GetEntryByName("Off");
+            if (autoExposureMode == null || !autoExposureMode.IsReadable)
+            {
+                throw new InvalidOperationException("Unable to set camera auto exposure.");
+            }
+
+            autoExposure.Value = autoExposureMode.Symbolic;
+
+            var cameraFrameRateEnabled = nodeMap.GetNode<IBool>("AcquisitionFrameRateEnabled");
+            if (cameraFrameRateEnabled == null || !cameraFrameRateEnabled.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to enable camera acquisition frame rate.");
+            }
+
+            cameraFrameRateEnabled.Value = true;
+
+            var acquisitionFrameRate = nodeMap.GetNode<IFloat>("AcquisitionFrameRate");
+            if (acquisitionFrameRate == null || !acquisitionFrameRate.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to set camera frame rate.");
+            }
+
+            if (FrameRate < acquisitionFrameRate.Min)
+            {
+                acquisitionFrameRate.Value = acquisitionFrameRate.Min;
+            }
+            else if (FrameRate > acquisitionFrameRate.Max)
+            {
+                acquisitionFrameRate.Value = acquisitionFrameRate.Max;
+            }
+            else
+            {
+                acquisitionFrameRate.Value = FrameRate;
+            }
+
+            var exposureTime = nodeMap.GetNode<IFloat>("ExposureTime");
+            if (exposureTime == null || !exposureTime.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to set camera exposure time.");
+            }
+
+            exposureTime.Value = exposureTime.Max;
         }
 
         static Func<IManagedImage, IplImage> GetConverter(PixelFormatEnums pixelFormat, ColorProcessingAlgorithm colorProcessing)
@@ -123,7 +208,7 @@ namespace Bonsai.Spinnaker
                 {
                     using (var destination = new ManagedImage((uint)width, (uint)height, 0, 0, outputFormat, output.ImageData.ToPointer()))
                     {
-                        image.Convert(destination, outputFormat, (SpinnakerNET.ColorProcessingAlgorithm)colorProcessing);
+                        image.ConvertToWriteAbleBitmap(outputFormat, destination,(SpinnakerNET.ColorProcessingAlgorithm)colorProcessing);
                         return output;
                     }
                 }
@@ -133,6 +218,87 @@ namespace Bonsai.Spinnaker
         public override IObservable<SpinnakerDataFrame> Generate()
         {
             return Generate(Observable.Return(Unit.Default));
+        }
+
+        protected void DisableSync(IManagedCamera camera)
+        {
+            var nodeMap = camera.GetNodeMap();
+            var lineSelector = nodeMap.GetNode<IEnum>("LineSelector");
+            if (lineSelector == null || !lineSelector.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to get sync output line selector.");
+            }
+            var line = lineSelector.GetEntryByName("Line1");
+            if (line == null || !line.IsReadable)
+            {
+                throw new InvalidOperationException("Unable to select sync output line.");
+            }
+
+            lineSelector.Value = line.Symbolic;
+
+            var lineSource = nodeMap.GetNode<IEnum>("LineSource");
+            if (lineSource == null || !lineSource.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to get sync output line source selector.");
+            }
+            var userOutput = lineSource.GetEntryByName("UserOutput1");
+            if (userOutput == null || !userOutput.IsReadable)
+            {
+                throw new InvalidOperationException("Unable to get User settable output for sync line.");
+            }
+
+            lineSource.Value = userOutput.Symbolic;
+
+            var outputSelector = nodeMap.GetNode<IEnum>("UserOutputSelector");
+            if (outputSelector == null || !outputSelector.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to get User Output selector.");
+            }
+            var output = outputSelector.GetEntryByName("UserOutputValue1");
+            if (output == null || !output.IsReadable)
+            {
+                throw new InvalidOperationException("Unable to set user output.");
+            }
+
+            outputSelector.Value = output.Symbolic;
+
+            var outputValue = nodeMap.GetNode<IBool>("UserOutputValue");
+            if (outputValue == null || !outputValue.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to set sync line.");
+            }
+
+            outputValue.Value = true;
+        }
+
+        protected void EnableSync(IManagedCamera camera)
+        {
+            var nodeMap = camera.GetNodeMap();
+            var lineSelector = nodeMap.GetNode<IEnum>("LineSelector");
+            if (lineSelector == null || !lineSelector.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to get sync output line selector.");
+            }
+            var line = lineSelector.GetEntryByName("Line1");
+            if (line == null || !line.IsReadable)
+            {
+                throw new InvalidOperationException("Unable to select sync output line.");
+            }
+
+            lineSelector.Value = line.Symbolic;
+
+            var lineSource = nodeMap.GetNode<IEnum>("LineSource");
+            if (lineSource == null || !lineSource.IsWritable)
+            {
+                throw new InvalidOperationException("Unable to get sync output line source selector.");
+            }
+            var userOutput = lineSource.GetEntryByName("ExposureActive");
+            if (userOutput == null || !userOutput.IsReadable)
+            {
+                throw new InvalidOperationException("Unable to get User settable output for sync line.");
+            }
+
+            lineSource.Value = userOutput.Symbolic;
         }
 
         public IObservable<SpinnakerDataFrame> Generate<TSource>(IObservable<TSource> start)
@@ -186,6 +352,7 @@ namespace Bonsai.Spinnaker
                         camera.Init();
                         Configure(camera);
                         camera.BeginAcquisition();
+                        EnableSync(camera);
                         await start;
 
                         var imageFormat = default(PixelFormatEnums);
@@ -217,6 +384,8 @@ namespace Bonsai.Spinnaker
                     catch (Exception ex) { observer.OnError(ex); throw; }
                     finally
                     {
+                        DisableSync(camera);
+                        camera.EndAcquisition();
                         camera.DeInit();
                         camera.Dispose();
                     }
