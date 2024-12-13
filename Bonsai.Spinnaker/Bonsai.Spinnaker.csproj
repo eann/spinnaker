@@ -15,10 +15,13 @@
     <PackageOutputPath>..\bin\$(Configuration)</PackageOutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <TargetFramework>net462</TargetFramework>
-    <VersionPrefix>0.8.0</VersionPrefix>
+    <VersionPrefix>0.8.1</VersionPrefix>
     <VersionSuffix></VersionSuffix>
     <Features>strict</Features>
     <Platforms>AnyCPU;x64</Platforms>
+    <FileVersion>0.8.1.0</FileVersion>
+    <AssemblyVersion>0.8.1.0</AssemblyVersion>
+    <Version>$(VersionPrefix)</Version>
   </PropertyGroup>
 
   <ItemGroup>

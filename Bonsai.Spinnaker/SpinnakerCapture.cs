@@ -28,8 +28,7 @@ namespace Bonsai.Spinnaker
         public string SerialNumber { get; set; }
 
         [Description("The method used to process bayer color images.")]
-        //public ColorProcessingAlgorithm ColorProcessing { get; set; }
-        public SpinnakerNET.ColorProcessingAlgorithm ColorProcessing { get; set; } = SpinnakerNET.ColorProcessingAlgorithm.HQ_LINEAR;
+        public ColorProcessingAlgorithm ColorProcessing { get; set; } = ColorProcessingAlgorithm.HQ_LINEAR;
 
         [Description("Camera's pixel format.")]
         public PixelFormatEnums PixFormat { get; set; } = PixelFormatEnums.BayerRG12p;
@@ -107,13 +106,19 @@ namespace Bonsai.Spinnaker
                 throw new InvalidOperationException("Unable to set camera auto exposure.");
             }
 
-            var autoExposureMode = autoExposure.GetEntryByName("Off");
-            if (autoExposureMode == null || !autoExposureMode.IsReadable)
+            var cameraFrameRateAuto = nodeMap.GetNode<IEnum>("AcquisitionFrameRateAuto");
+            if (cameraFrameRateAuto == null || !cameraFrameRateAuto.IsWritable)
             {
-                throw new InvalidOperationException("Unable to set camera auto exposure.");
+                throw new InvalidOperationException("Unable to turn off automatic frame rate.");
             }
 
-            autoExposure.Value = autoExposureMode.Symbolic;
+            var frameRateAutoOff = cameraFrameRateAuto.GetEntryByName("Off");
+            if (frameRateAutoOff == null || !frameRateAutoOff.IsReadable)
+            {
+                throw new InvalidOperationException("Unable to get automatic frame rate options.");
+            }
+
+            cameraFrameRateAuto.Value = frameRateAutoOff.Symbolic;
 
             var cameraFrameRateEnabled = nodeMap.GetNode<IBool>("AcquisitionFrameRateEnabled");
             if (cameraFrameRateEnabled == null || !cameraFrameRateEnabled.IsWritable)
@@ -142,79 +147,22 @@ namespace Bonsai.Spinnaker
                 acquisitionFrameRate.Value = FrameRate;
             }
 
-            var exposureTime = nodeMap.GetNode<IFloat>("ExposureTime");
-            if (exposureTime == null || !exposureTime.IsWritable)
+            var autoExposureMode = autoExposure.GetEntryByName("Continuous");
+            if (autoExposureMode == null || !autoExposureMode.IsReadable)
             {
-                throw new InvalidOperationException("Unable to set camera exposure time.");
+                throw new InvalidOperationException("Unable to set camera auto exposure.");
             }
 
-            exposureTime.Value = exposureTime.Max;
+            autoExposure.Value = autoExposureMode.Symbolic;
+
+            // var exposureTime = nodeMap.GetNode<IFloat>("ExposureTime");
+            // if (exposureTime == null || !exposureTime.IsWritable)
+            // {
+            //     throw new InvalidOperationException("Unable to set camera exposure time.");
+            // }
+
+            // exposureTime.Value = exposureTime.Max;
         }
-
-        /*static Func<IManagedImage, IplImage> GetConverter(PixelFormatEnums pixelFormat, ColorProcessingAlgorithm colorProcessing)
-        {
-            int outputChannels;
-            IplDepth outputDepth;
-            if (pixelFormat < PixelFormatEnums.BayerGR8 || pixelFormat == PixelFormatEnums.BGR8 ||
-                pixelFormat <= PixelFormatEnums.BayerBG16 && colorProcessing == ColorProcessingAlgorithm.NoColorProcessing)
-            {
-                if (pixelFormat == PixelFormatEnums.BGR8)
-                {
-                    outputChannels = 3;
-                    outputDepth = IplDepth.U8;
-                }
-                else
-                {
-                    outputChannels = 1;
-                    var depthFactor = (int)pixelFormat;
-                    if (pixelFormat > PixelFormatEnums.Mono16) depthFactor = (depthFactor - 3) / 4;
-                    outputDepth = (IplDepth)(8 * (depthFactor + 1));
-                }
-
-                return image =>
-                {
-                    var width = (int)image.Width;
-                    var height = (int)image.Height;
-                    using (var bitmapHeader = new IplImage(new Size(width, height), outputDepth, outputChannels, image.DataPtr))
-                    {
-                        var output = new IplImage(bitmapHeader.Size, outputDepth, outputChannels);
-                        CV.Copy(bitmapHeader, output);
-                        return output;
-                    }
-                };
-            }
-
-            PixelFormatEnums outputFormat;
-            if (pixelFormat == PixelFormatEnums.Mono12p ||
-                pixelFormat == PixelFormatEnums.Mono12Packed)
-            {
-                outputFormat = PixelFormatEnums.Mono16;
-                outputDepth = IplDepth.U16;
-                outputChannels = 1;
-            }
-            else if (pixelFormat >= PixelFormatEnums.BayerGR8 && pixelFormat <= PixelFormatEnums.BayerBG16)
-            {
-                outputFormat = PixelFormatEnums.BGR8;
-                outputDepth = IplDepth.U8;
-                outputChannels = 3;
-            }
-            else throw new InvalidOperationException(string.Format("Unable to convert pixel format {0}.", pixelFormat));
-
-            return image =>
-            {
-                var width = (int)image.Width;
-                var height = (int)image.Height;
-                var output = new IplImage(new Size(width, height), outputDepth, outputChannels);
-                unsafe
-                {
-                    using (var destination = new ManagedImage((uint)width, (uint)height, 0, 0, outputFormat, output.ImageData.ToPointer()))
-                    {
-                        image.ConvertToWriteAbleBitmap(outputFormat, destination,(SpinnakerNET.ColorProcessingAlgorithm)colorProcessing);
-                        return output;
-                    }
-                }
-            };
-        }*/
 
         public override IObservable<SpinnakerDataFrame> Generate()
         {
@@ -359,7 +307,6 @@ namespace Bonsai.Spinnaker
                         var imageFormat = PixelFormatEnums.UNKNOWN_PIXELFORMAT;
                         var depth = IplDepth.U8;
                         int channels = 1;
-                        //var converter = default(Func<IManagedImage, IplImage>);
                         IManagedImageProcessor converter = new ManagedImageProcessor();
                         converter.SetColorProcessing(ColorProcessing);
                         using (var cancellation = cancellationToken.Register(camera.EndAcquisition))
@@ -376,8 +323,13 @@ namespace Bonsai.Spinnaker
 
                                     if (imageFormat == PixelFormatEnums.UNKNOWN_PIXELFORMAT)
                                     {
-                                        //converter = GetConverter(image.PixelFormat, ColorProcessing);
-                                        if (image.PixelFormat.ToString().Contains("Mono"))
+                                        if (image.PixelFormat == PixelFormatEnums.Mono8)
+                                        {
+                                            imageFormat = PixelFormatEnums.Mono8;
+                                            depth = IplDepth.U8;
+                                            channels = 1;
+                                        }
+                                        else if (image.PixelFormat.ToString().Contains("Mono"))
                                         {
                                             imageFormat = PixelFormatEnums.Mono16;
                                             depth = IplDepth.U16;
@@ -389,10 +341,8 @@ namespace Bonsai.Spinnaker
                                             depth = IplDepth.U8;
                                             channels = 3;
                                         }
-                                        //imageFormat = image.PixelFormat;
                                     }
 
-                                    //var output = converter(image);
                                     using (IManagedImage convertedImage = converter.Convert(image, imageFormat))
                                     {
                                         var width = (int)image.Width;
